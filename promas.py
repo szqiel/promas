@@ -5,6 +5,7 @@ Scalable, zero-hardcoding product image scraper and universal URL extractor for 
 
 import json
 import re
+import base64
 import urllib.parse
 import asyncio
 import argparse
@@ -32,7 +33,6 @@ class ProductImageResult(BaseModel):
 # Image Normalization, Upscaling & Quality Filtering
 # ==============================================================================
 
-# Bad keywords indicating icons, logos, badges, tracking pixels
 BLOCKED_PATTERNS = [
     r'logo', r'icon', r'badge', r'avatar', r'spacer', r'pixel', r'blank',
     r'tracking', r'spinner', r'placeholder', r'arrow', r'rating', r'star',
@@ -43,7 +43,7 @@ BLOCKED_REGEX = re.compile('|'.join(BLOCKED_PATTERNS), re.IGNORECASE)
 
 def clean_and_upscale_image_url(url: str, base_url: Optional[str] = None) -> Optional[str]:
     """
-    Cleans Cloudflare/Imgix/Shopify wrappers and upgrades resolution constraints
+    Cleans Cloudflare/Imgix/Shopify/Nike/Amazon/eBay wrappers and upgrades resolution constraints
     to retrieve the highest-resolution master asset.
     """
     if not url or not isinstance(url, str):
@@ -73,56 +73,86 @@ def clean_and_upscale_image_url(url: str, base_url: Optional[str] = None) -> Opt
     if clean_path.endswith(".svg") or clean_path.endswith(".gif"):
         return None
 
+    # Filter out generic header/footer banners (e.g. static.nike.com/.../image.png)
+    if url.endswith("/image.png") or url.endswith("/image.jpg") or url.endswith("/image.webp"):
+        return None
+
     # 1. Cloudflare CDN wrapper unwrap: /cdn-cgi/image/.../(https?://...)
     cf_match = re.search(r'/cdn-cgi/image/[^/]+/(https?://.+)', url)
     if cf_match:
         url = cf_match.group(1)
 
-    # 2. Shopify CDN resolution upscaler: _300x300.jpg, _500x.png -> _2048x2048.jpg
+    # 2. Nike CDN upscaler: convert to master 1728px resolution (t_PDP_1728_v1)
+    if "static.nike.com" in url:
+        nike_match = re.search(r'static\.nike\.com/a/images/(?:.+/)?([0-9a-fA-F\-]{36})/([^\s/]+\.(?:png|jpg|jpeg|webp))', url)
+        if nike_match:
+            uid = nike_match.group(1)
+            fname = nike_match.group(2)
+            url = f"https://static.nike.com/a/images/t_PDP_1728_v1/f_auto,q_auto:eco/{uid}/{fname}"
+        else:
+            url = re.sub(r'/(?:t_[^/]+|w_\d+[^/]*|c_limit[^/]*)/', r'/t_PDP_1728_v1/f_auto,q_auto:eco/', url)
+
+    # 3. Shopify CDN resolution upscaler: _300x300.jpg, _500x.png -> _2048x2048.jpg
     if "cdn.shopify.com" in url:
         url = re.sub(r'_(?:\d+x\d*|\d*x\d+)\.(jpg|jpeg|png|webp)', r'_2048x2048.\1', url, flags=re.IGNORECASE)
 
-    # 3. Amazon image resolution upscaler: ._AC_SL300_.jpg -> ._AC_SL1500_.jpg
+    # 4. Amazon image resolution upscaler: ._AC_SL300_.jpg -> ._AC_SL1500_.jpg
     if "media-amazon.com" in url or "images-amazon.com" in url or "ssl-images-amazon.com" in url:
         url = re.sub(r'\._[A-Z0-9_,]+_\.(jpg|jpeg|png|webp)', r'._AC_SL1500_.\1', url, flags=re.IGNORECASE)
 
-    # 4. eBay image upscaler: s-l300.jpg, s-l500.jpg -> s-l1600.jpg
+    # 5. eBay image upscaler: s-l300.jpg, s-l500.jpg -> s-l1600.jpg
     if "i.ebayimg.com" in url:
         url = re.sub(r'/s-l\d+\.(jpg|jpeg|png|webp)', r'/s-l1600.\1', url, flags=re.IGNORECASE)
 
-    # 5. B&H Photo CDN upscaler: images500x500 -> images2500x2500
+    # 6. B&H Photo CDN upscaler: images500x500 -> images2500x2500
     if "bhphoto.com" in url or "static.bhphoto.com" in url:
         url = url.replace("/images/smallimages/", "/images/images2500x2500/")
         url = url.replace("/multiple_images/thumbnails/", "/multiple_images/images500x500/")
         url = url.replace("/images/thumbnails/", "/images/images500x500/")
         url = re.sub(r'/images(345x345|500x500|150x150)/', '/images2500x2500/', url)
 
-    # 6. Generic Imgix / Cloudinary query width/height stripping or upscaling
+    # 7. Adobe Scene7 CDN (Target, Home Depot, Best Buy, etc.) - unwrap to unconstrained original
+    if "scene7.com" in url:
+        url = url.split("?")[0]
+
+    # 8. Generic Imgix / Cloudinary query width/height stripping or upscaling
     if "imgix.net" in url or "cloudinary.com" in url or "fastly.net" in url:
-        # Increase width/height parameters or remove downscaling
         url = re.sub(r'([?&])w=\d+', r'\1w=2000', url)
         url = re.sub(r'([?&])width=\d+', r'\1width=2000', url)
         url = re.sub(r'/w_\d+,h_\d+/', r'/w_2000,h_2000/', url)
-
-    # 7. Adobe Scene7 CDN (Target, Home Depot, Best Buy, etc.) - unwrap to master original
-    if "scene7.com" in url:
-        url = url.split("?")[0]
 
     return url
 
 
 def is_valid_product_image(url: str) -> bool:
     """
-    Validates if an image URL looks like a genuine product/gallery photo rather than UI noise.
+    Validates if an image URL looks like a genuine product/gallery photo rather than UI noise or URL fragments.
     """
-    if not url:
+    if not url or not isinstance(url, str):
         return False
 
     url_lower = url.lower()
-    # Check for blocked patterns (icons, badges, logos, etc.)
+    clean_path = url_lower.split("?")[0]
+
+    # Must end with a valid image extension or have a clean Scene7 asset ID
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp", ".avif")
+    has_valid_ext = any(clean_path.endswith(ext) for ext in valid_exts)
+    has_scene7 = "scene7.com/is/image" in url_lower
+
+    if not has_valid_ext and not has_scene7:
+        return False
+
+    # Reject URLs containing transformation fragment artifacts
+    if any(b in clean_path for b in ["fl_layer_apply", "c_limit", "fl_relative", "c_scale", "w_1.0", "h_1.0", "f_auto"]):
+        # Only allow if it's a properly formed Nike master URL
+        if not ("static.nike.com/a/images/t_PDP_1728_v1" in url and clean_path.endswith(valid_exts)):
+            return False
+
+    # Check for blocked patterns (icons, badges, logos, tracking pixels)
     if BLOCKED_REGEX.search(url_lower):
-        # Allow if it's explicitly inside a known product/gallery path
-        if not any(k in url_lower for k in ["/product", "/gallery", "/media", "/item", "/images2500x2500", "i.ebayimg.com"]):
+        if not any(k in url_lower for k in [
+            "/product", "/gallery", "/media", "/item", "/images2500x2500", "i.ebayimg.com", "static.nike.com"
+        ]):
             return False
 
     # Check for tiny dimension parameters in URL
@@ -134,24 +164,28 @@ def is_valid_product_image(url: str) -> bool:
 
 def parse_srcset_images(srcset_val: str, base_url: Optional[str] = None) -> List[str]:
     """
-    Parses a srcset attribute and extracts the highest-resolution candidate.
+    Robustly parses srcset candidate URLs without breaking on Cloudinary / Nike comma parameters.
     """
     candidates = []
     if not srcset_val:
         return candidates
 
-    entries = srcset_val.split(",")
-    for entry in entries:
-        parts = entry.strip().split()
-        if not parts:
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp", ".avif")
+    # Matches URLs starting with http(s):// or /
+    entries = re.findall(r'(https?://[^\s,]+|/[^\s,]+|\S+?)(?:\s+([0-9.]+[wx]))?(?:,\s*|$)', srcset_val)
+    for src, size_str in entries:
+        src = src.strip().rstrip(",")
+        if not src or len(src) < 8:
             continue
-        src = parts[0]
+        clean_src = src.split("?")[0].lower()
+        if not any(clean_src.endswith(ext) for ext in valid_exts) and "scene7.com" not in clean_src:
+            continue
+
         size = 0
-        if len(parts) > 1:
-            size_str = parts[1]
+        if size_str:
             if size_str.endswith("w"):
                 try:
-                    size = int(size_str[:-1])
+                    size = int(float(size_str[:-1]))
                 except ValueError:
                     size = 0
             elif size_str.endswith("x"):
@@ -160,11 +194,10 @@ def parse_srcset_images(srcset_val: str, base_url: Optional[str] = None) -> List
                 except ValueError:
                     size = 0
         cleaned = clean_and_upscale_image_url(src, base_url)
-        if cleaned:
+        if cleaned and is_valid_product_image(cleaned):
             candidates.append((size, cleaned))
 
     if candidates:
-        # Sort by size descending and return highest
         candidates.sort(key=lambda x: x[0], reverse=True)
         return [c[1] for c in candidates]
     return []
@@ -177,7 +210,6 @@ def parse_srcset_images(srcset_val: str, base_url: Optional[str] = None) -> List
 def parse_json_ld_images(raw_json: str, base_url: Optional[str] = None) -> List[str]:
     """
     Extracts image URLs from Schema.org JSON-LD scripts across any website.
-    Handles Products, ImageObjects, Graphs, nested structures, and arrays.
     """
     images = []
     try:
@@ -229,14 +261,22 @@ def parse_json_ld_images(raw_json: str, base_url: Optional[str] = None) -> List[
 async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
     """
     Universal extraction pipeline for any given web page:
-    1. Schema.org JSON-LD
-    2. Microdata & RDFa ([itemprop="image"])
-    3. OpenGraph & Twitter Cards
-    4. Dynamic JS data blobs (Amazon dynamic images, Shopify product JSON)
-    5. High-Res DOM Selectors & srcset
+    1. Triggers scroll to load lazy-loaded product cards and galleries.
+    2. Schema.org JSON-LD
+    3. Microdata & RDFa ([itemprop="image"])
+    4. OpenGraph & Twitter Cards
+    5. Dynamic JS data blobs (Amazon, Shopify, Nike)
+    6. High-Res DOM Selectors & srcset
     """
     images: List[str] = []
     title = await page.title()
+
+    # Trigger brief scroll to hydrate lazy-loaded images
+    try:
+        await page.evaluate("window.scrollBy(0, 600)")
+        await page.wait_for_timeout(1500)
+    except Exception:
+        pass
 
     # 1. Schema.org JSON-LD
     schemas = await page.locator('script[type="application/ld+json"]').all_inner_texts()
@@ -276,7 +316,7 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
             if cleaned and is_valid_product_image(cleaned) and cleaned not in images:
                 images.append(cleaned)
 
-    # 4. Amazon Dynamic Image Data JSON / Scripts
+    # 4. Amazon Dynamic Image Data JSON
     try:
         dyn_imgs = await page.locator('#landingImage, #imgBlkFront, [data-a-dynamic-image]').all()
         for dyn_el in dyn_imgs:
@@ -301,17 +341,22 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
         'picture source[srcset]',
         '[data-selenium="inlineMediaMainImage"]',
         '[data-selenium="productMainImage"]',
+        'img[data-testid*="product-card"]',
         'img.product-image',
         'img.gallery-image',
         'img[class*="product"]',
-        'img[id*="product"]'
+        'img[id*="product"]',
+        'img[src*="static.nike.com/a/images"]',
+        'img[src*="i.ebayimg.com"]',
+        'img[src*="target.scene7.com"]',
+        'img[src*="static.bhphoto.com"]'
     ]
     for sel in dom_image_selectors:
         locs = page.locator(sel)
-        cnt = min(await locs.count(), 10)
+        cnt = min(await locs.count(), 20)
         for i in range(cnt):
             loc = locs.nth(i)
-            # Check high-res data attributes
+            # High-res data attributes
             for attr in ["data-zoom-image", "data-high-res-src", "data-large-img", "data-old-hires", "data-zoom-image-src"]:
                 hires_val = await loc.get_attribute(attr)
                 if hires_val:
@@ -319,7 +364,7 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
                     if cleaned and is_valid_product_image(cleaned) and cleaned not in images:
                         images.append(cleaned)
 
-            # Check srcset
+            # srcset
             srcset_val = await loc.get_attribute("srcset")
             if srcset_val:
                 srcset_imgs = parse_srcset_images(srcset_val, url)
@@ -327,14 +372,14 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
                     if s_img and is_valid_product_image(s_img) and s_img not in images:
                         images.append(s_img)
 
-            # Check standard src
+            # src
             src_val = await loc.get_attribute("src")
             if src_val:
                 cleaned = clean_and_upscale_image_url(src_val, url)
                 if cleaned and is_valid_product_image(cleaned) and cleaned not in images:
                     images.append(cleaned)
 
-    # 6. Clean Page Title if available
+    # 6. Page Title
     h1_loc = page.locator('h1').first
     if await h1_loc.count() > 0:
         h1_text = (await h1_loc.inner_text()).strip()
@@ -352,6 +397,28 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
 # Search-Driven Dynamic Discovery Engine
 # ==============================================================================
 
+def decode_bing_redirect(url: str) -> Optional[str]:
+    """
+    Decodes Bing redirection links (e.g. /ck/a?...&u=a1<base64>) to direct destination URLs.
+    """
+    if not url:
+        return None
+    if "/ck/a?" in url and "&u=" in url:
+        m = re.search(r'[?&]u=a1([a-zA-Z0-9_\-]+)', url)
+        if m:
+            b64 = m.group(1)
+            b64 += "=" * ((4 - len(b64) % 4) % 4)
+            try:
+                decoded = base64.b64decode(b64.replace("-", "+").replace("_", "/")).decode("utf-8", errors="ignore")
+                if decoded.startswith("http"):
+                    return decoded
+            except Exception:
+                pass
+    elif url.startswith("http") and "bing.com" not in url:
+        return url
+    return None
+
+
 def score_product_url(url: str, query_keywords: List[str]) -> int:
     """
     Ranks URLs based on e-commerce product indicators and query keyword relevance.
@@ -359,31 +426,32 @@ def score_product_url(url: str, query_keywords: List[str]) -> int:
     score = 0
     url_lower = url.lower()
 
-    # Boost authoritative e-commerce / brand domains
+    # Authoritative store / brand domains
     high_priority_domains = [
         "apple.com", "sony.com", "nike.com", "samsung.com", "canon.com",
         "bhphotovideo.com", "adorama.com", "bestbuy.com", "amazon.com",
-        "ebay.com", "walmart.com", "target.com", "newegg.com", "microcenter.com"
+        "ebay.com", "walmart.com", "target.com", "stockx.com", "goat.com",
+        "footlocker.com", "newegg.com", "microcenter.com"
     ]
     for d in high_priority_domains:
         if d in url_lower:
+            score += 30
+            break
+
+    # E-commerce URL paths
+    ecom_indicators = ["/product/", "/dp/", "/p/", "/item/", "/buy/", "/shop/", "/pd/", "/t/", "/w/"]
+    for ind in ecom_indicators:
+        if ind in url_lower:
             score += 25
             break
 
-    # Boost e-commerce URL patterns
-    ecom_indicators = ["/product/", "/dp/", "/p/", "/item/", "/buy/", "/shop/", "/pd/", "/t/"]
-    for ind in ecom_indicators:
-        if ind in url_lower:
-            score += 20
-            break
-
     # Penalize non-product pages
-    penalize_indicators = ["/category/", "/search", "/tag/", "/forum/", "/thread/", "/news/", "/blog/", "wikipedia.org", "youtube.com"]
+    penalize_indicators = ["/category/", "/tag/", "/forum/", "/thread/", "/news/", "/blog/", "wikipedia.org", "youtube.com"]
     for pen in penalize_indicators:
         if pen in url_lower:
-            score -= 30
+            score -= 40
 
-    # Boost keyword matches in URL
+    # Keyword match
     for kw in query_keywords:
         if len(kw) > 2 and kw in url_lower:
             score += 10
@@ -393,51 +461,46 @@ def score_product_url(url: str, query_keywords: List[str]) -> int:
 
 async def discover_product_urls(page: Page, query: str, site_filter: Optional[str] = None, max_urls: int = 3) -> List[str]:
     """
-    Discovers top product pages dynamically via open search query.
+    Multi-provider search engine discovery (Bing + DuckDuckGo fallback).
     """
-    search_query = query
-    if site_filter:
-        search_query = f"site:{site_filter} {query}"
-
-    encoded = urllib.parse.quote(search_query)
-    search_url = f"https://html.duckduckgo.com/html/?q={encoded}"
-
+    search_query = query if not site_filter else f"site:{site_filter} {query}"
+    encoded = urllib.parse.quote(f"{search_query} buy")
     discovered_urls: List[str] = []
 
+    # 1. Primary: Bing Organic Search
     try:
-        await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
-        # Extract organic result links
-        links = await page.locator('a.result__url, a.result__snippet, a.result__title').all()
-        raw_urls = []
+        bing_url = f"https://www.bing.com/search?q={encoded}"
+        await page.goto(bing_url, wait_until="domcontentloaded", timeout=15000)
+        links = await page.locator('#b_results h2 a').all()
         for link in links:
             href = await link.get_attribute("href")
-            if not href:
-                continue
-
-            # DuckDuckGo wraps URLs as //duckduckgo.com/l/?uddg=...
-            if "uddg=" in href:
-                parsed = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
-                if "uddg" in parsed and parsed["uddg"]:
-                    actual_url = parsed["uddg"][0]
-                    if actual_url.startswith("http") and actual_url not in raw_urls:
-                        raw_urls.append(actual_url)
-            elif href.startswith("http") and "duckduckgo.com" not in href and href not in raw_urls:
-                raw_urls.append(href)
-
-        # Rank and pick top URLs
-        query_kw = [k.lower() for k in query.split() if len(k) > 2]
-        scored_urls = [(score_product_url(u, query_kw), u) for u in raw_urls]
-        scored_urls.sort(key=lambda x: x[0], reverse=True)
-
-        discovered_urls = [u for score, u in scored_urls if score > 0][:max_urls]
-        if not discovered_urls and raw_urls:
-            discovered_urls = raw_urls[:max_urls]
-
+            decoded = decode_bing_redirect(href)
+            if decoded and decoded not in discovered_urls:
+                discovered_urls.append(decoded)
     except Exception:
-        # Fallback to direct search URL construction for prominent sites if search engine was blocked
         pass
 
-    return discovered_urls
+    # 2. Fallback: DuckDuckGo JS search if Bing returned empty
+    if not discovered_urls:
+        try:
+            ddg_url = f"https://duckduckgo.com/?q={urllib.parse.quote(search_query)}"
+            await page.goto(ddg_url, wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(1500)
+            ddg_links = await page.locator('article h2 a, [data-testid="result-title-a"]').all()
+            for link in ddg_links:
+                href = await link.get_attribute("href")
+                if href and href.startswith("http") and "duckduckgo.com" not in href and href not in discovered_urls:
+                    discovered_urls.append(href)
+        except Exception:
+            pass
+
+    # Rank and pick top URLs
+    query_kw = [k.lower() for k in query.split() if len(k) > 2]
+    scored = [(score_product_url(u, query_kw), u) for u in discovered_urls]
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    final_urls = [u for score, u in scored if score > 0][:max_urls]
+    return final_urls if final_urls else discovered_urls[:max_urls]
 
 
 # ==============================================================================
@@ -446,15 +509,14 @@ async def discover_product_urls(page: Page, query: str, site_filter: Optional[st
 
 async def scrape_image_index_fallback(page: Page, query: str, max_images: int = 10) -> List[str]:
     """
-    Fallback mechanism: Queries open image search directly if PDPs fail or return 0 images.
+    Fallback: Queries open image search directly if PDPs fail or return 0 images.
     """
     images: List[str] = []
-    encoded = urllib.parse.quote(f"{query} product")
+    encoded = urllib.parse.quote(f"{query} product photo")
     url = f"https://www.bing.com/images/search?q={encoded}&FORM=HDRSC2"
 
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        # Bing image data is embedded in <a class="iusc" m='{"murl":"..."}'>
         locs = page.locator('a.iusc')
         cnt = min(await locs.count(), max_images * 2)
         for i in range(cnt):
@@ -490,9 +552,9 @@ async def get_product_images(
     Universal entry point: Scrapes high-resolution product imagery from any URL or search query.
 
     Args:
-        query: Product name/model (e.g. 'iPhone 16 Pro', 'Sony FX3') OR a direct URL
+        query: Product name/model (e.g. 'iPhone 16 Pro', 'Nike Air Jordan 1') OR a direct URL
         max_images: Maximum number of high-res images to return (default: 10)
-        site_filter: Optional domain filter (e.g. 'apple.com', 'bhphotovideo.com')
+        site_filter: Optional domain filter (e.g. 'apple.com', 'nike.com', 'bhphotovideo.com')
     """
     query = query.strip()
     is_direct_url = query.startswith("http://") or query.startswith("https://")
@@ -564,7 +626,6 @@ async def get_product_images(
             for pr in page_results:
                 sources_scraped.append(pr["url"])
                 for img in pr.get("images", []):
-                    # Deduplicate based on base URL (ignoring minor query string variations)
                     base_key = img.split("?")[0].lower()
                     if base_key not in seen_keys and img not in all_images:
                         seen_keys.add(base_key)
@@ -624,7 +685,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Promas: Universal Product Image Scraper CLI")
     parser.add_argument("query", nargs="?", default="iPhone 16 Pro", help="Product query or direct URL")
     parser.add_argument("--max-images", type=int, default=10, help="Maximum images to return (default: 10)")
-    parser.add_argument("--site", default=None, help="Optional site domain filter (e.g. apple.com)")
+    parser.add_argument("--site", default=None, help="Optional site domain filter (e.g. apple.com, nike.com)")
     args = parser.parse_args()
 
     print(f"[*] Promas querying: '{args.query}' (max: {args.max_images}, site: {args.site})...")
