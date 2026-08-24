@@ -3,7 +3,8 @@ CDN Normalizer Registry
 Plugin-style decorator pattern mapping domain strings to dedicated upscaler functions.
 """
 
-from typing import Optional, Callable, Dict
+from typing import Callable, Dict, Optional
+
 from promas.cdn.generic import clean_generic_url, is_valid_product_image
 
 # Global Registry: domain pattern -> normalizer function

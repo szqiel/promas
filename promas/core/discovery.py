@@ -5,10 +5,11 @@ Product Discovery & URL Scoring
 import json
 import urllib.parse
 from typing import List, Optional
-from playwright.async_api import Page
-from promas.search_backends.bing_browser import BingBrowserSearchBackend
-from promas.cdn.registry import clean_and_upscale_image_url, is_valid_product_image
 
+from playwright.async_api import Page
+
+from promas.cdn.registry import clean_and_upscale_image_url, is_valid_product_image
+from promas.search_backends.bing_browser import BingBrowserSearchBackend
 
 DISCARD_DOMAINS = [
     "google.com", "bing.com", "duckduckgo.com", "wikipedia.org", "wikimedia.org",

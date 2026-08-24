@@ -5,8 +5,10 @@ Extracts high-resolution product imagery from Schema.org JSON-LD, Microdata, Ope
 
 import json
 import re
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from playwright.async_api import Page
+
 from promas.cdn.registry import clean_and_upscale_image_url, is_valid_product_image
 
 
@@ -14,22 +16,23 @@ def parse_srcset_images(srcset_val: str, base_url: Optional[str] = None) -> List
     """
     Parses srcset candidate URLs without breaking on Cloudinary / Nike comma parameters.
     """
-    candidates = []
+    candidates: List[tuple[int, str]] = []
     if not srcset_val:
-        return candidates
+        return []
 
-    valid_exts = (".jpg", ".jpeg", ".png", ".webp", ".avif")
-    entries = re.findall(r'(https?://[^\s,]+|/[^\s,]+|\S+?)(?:\s+([0-9.]+[wx]))?(?:,\s*|$)', srcset_val)
-    for src, size_str in entries:
-        src = src.strip().rstrip(",")
-        if not src or len(src) < 8:
+    # Split candidates by comma only when followed by a new URL starting with http(s):// or /
+    raw_entries = re.split(r',\s+(?=https?://|/|\S+\.\w{3,4})', srcset_val.strip())
+    for entry in raw_entries:
+        parts = entry.strip().split()
+        if not parts:
             continue
-        clean_src = src.split("?")[0].lower()
-        if not any(clean_src.endswith(ext) for ext in valid_exts) and "scene7.com" not in clean_src:
+        src = parts[0].rstrip(",")
+        if not src or len(src) < 5:
             continue
 
         size = 0
-        if size_str:
+        if len(parts) > 1:
+            size_str = parts[1]
             if size_str.endswith("w"):
                 try:
                     size = int(float(size_str[:-1]))
@@ -40,6 +43,7 @@ def parse_srcset_images(srcset_val: str, base_url: Optional[str] = None) -> List
                     size = int(float(size_str[:-1]) * 1000)
                 except ValueError:
                     size = 0
+
         cleaned = clean_and_upscale_image_url(src, base_url)
         if cleaned and is_valid_product_image(cleaned):
             candidates.append((size, cleaned))
@@ -54,7 +58,7 @@ def parse_json_ld_images(raw_json: str, base_url: Optional[str] = None) -> List[
     """
     Extracts image URLs from Schema.org JSON-LD scripts across any website.
     """
-    images = []
+    images: List[str] = []
     try:
         data = json.loads(raw_json)
     except Exception:

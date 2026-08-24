@@ -4,6 +4,7 @@ Pydantic schemas for product image scraping results and metadata.
 """
 
 from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 

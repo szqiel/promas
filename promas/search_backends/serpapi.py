@@ -4,8 +4,9 @@ SerpAPI Search Backend (Optional API-key based)
 
 import os
 from typing import List, Optional
-import urllib.parse
+
 from playwright.async_api import Page
+
 from promas.search_backends.base import BaseSearchBackend
 
 try:
@@ -26,11 +27,11 @@ class SerpApiSearchBackend(BaseSearchBackend):
             return []
 
         search_query = query if not site_filter else f"site:{site_filter} {query}"
-        params = {
+        params: dict[str, str | int] = {
             "engine": "google",
             "q": search_query,
             "api_key": self.api_key,
-            "num": 5
+            "num": 5,
         }
         try:
             async with httpx.AsyncClient() as client:

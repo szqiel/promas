@@ -2,15 +2,17 @@
 Bing Browser Stealth Search Backend
 """
 
-import re
 import base64
+import re
 import urllib.parse
 from typing import List, Optional
+
 from playwright.async_api import Page
+
 from promas.search_backends.base import BaseSearchBackend
 
 
-def decode_bing_redirect(url: str) -> Optional[str]:
+def decode_bing_redirect(url: Optional[str]) -> Optional[str]:
     """
     Decodes Bing redirection links (/ck/a?...&u=a1<base64>) to direct destination URLs.
     """

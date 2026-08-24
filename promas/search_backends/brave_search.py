@@ -4,8 +4,9 @@ Brave Search Backend (Optional API-key based)
 
 import os
 from typing import List, Optional
-import urllib.parse
+
 from playwright.async_api import Page
+
 from promas.search_backends.base import BaseSearchBackend
 
 try:
@@ -30,7 +31,7 @@ class BraveSearchBackend(BaseSearchBackend):
             "Accept": "application/json",
             "X-Subscription-Token": self.api_key
         }
-        params = {"q": search_query, "count": 5}
+        params: dict[str, str | int] = {"q": search_query, "count": 5}
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get("https://api.search.brave.com/res/v1/web/search", headers=headers, params=params, timeout=10.0)

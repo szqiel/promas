@@ -4,8 +4,8 @@ Coordinates dynamic search discovery, parallel browser contexts, universal extra
 """
 
 import asyncio
-import urllib.parse
-from typing import Optional, List
+from typing import List, Optional
+
 from playwright.async_api import async_playwright
 
 try:
@@ -14,9 +14,9 @@ try:
 except ImportError:
     HAS_STEALTH = False
 
-from promas.core.models import ProductImageResult
 from promas.core.discovery import discover_product_urls, scrape_image_index_fallback
 from promas.core.extractor import extract_page_product_images
+from promas.core.models import ProductImageResult
 
 
 async def get_product_images(
@@ -35,7 +35,6 @@ async def get_product_images(
     query = query.strip()
     is_direct_url = query.startswith("http://") or query.startswith("https://")
 
-    stealth = Stealth() if HAS_STEALTH else None
     pw_cm = Stealth().use_async(async_playwright()) if HAS_STEALTH else async_playwright()
 
     async with pw_cm as p:

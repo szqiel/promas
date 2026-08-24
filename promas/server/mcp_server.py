@@ -4,7 +4,9 @@ Exposes Promas product image extraction tools over Model Context Protocol (MCP).
 """
 
 from typing import Optional
+
 from mcp.server.fastmcp import FastMCP
+
 from promas.core.models import ProductImageResult
 from promas.orchestrator import get_product_images
 

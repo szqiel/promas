@@ -2,8 +2,9 @@
 Promas Command-Line Interface
 """
 
-import asyncio
 import argparse
+import asyncio
+
 from promas.orchestrator import get_product_images
 
 

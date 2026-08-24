@@ -1,5 +1,6 @@
 # Promas (Product Image Scraper)
 
+[![CI](https://github.com/szqiel/promas/actions/workflows/ci.yml/badge.svg)](https://github.com/szqiel/promas/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastMCP](https://img.shields.io/badge/MCP-FastMCP-green.svg)](https://modelcontextprotocol.io/)
@@ -128,6 +129,26 @@ GUIDELINES FOR USING PROMAS:
 
 ---
 
-## 7. License
+## 7. Testing & Quality Assurance
+
+Promas includes unit tests for pure parsing functions, type checks, and canary integration tests:
+
+```bash
+# Run unit tests
+pytest -v
+
+# Run linting
+ruff check .
+
+# Run type checker
+mypy promas/ tests/
+
+# Run live golden canary integration tests (hits live sites)
+pytest -v --run-integration
+```
+
+---
+
+## 8. License
 
 This project is licensed under the [MIT License](LICENSE).

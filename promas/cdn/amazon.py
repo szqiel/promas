@@ -3,6 +3,7 @@ Amazon CDN Normalizer Rule
 """
 
 import re
+
 from promas.cdn.registry import register_cdn
 
 
