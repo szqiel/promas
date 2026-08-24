@@ -1,36 +1,47 @@
 """
 Promas (Product Image Scraper) - FastMCP Server
-Model Context Protocol (MCP) Server for AI agents to retrieve high-resolution product imagery.
+Model Context Protocol (MCP) Server for AI agents to retrieve high-resolution product imagery from any website.
 """
 
+from typing import Optional
 from mcp.server.fastmcp import FastMCP
-from promas import scrape_product_images, ProductImageResult
+from promas import get_product_images, ProductImageResult
 
 mcp = FastMCP("promas")
 
 
 @mcp.tool()
-async def get_product_images(query: str, source: str = "bh") -> ProductImageResult:
+async def fetch_product_images(
+    query: str,
+    max_images: int = 10,
+    site_filter: Optional[str] = None
+) -> ProductImageResult:
     """
-    Searches e-commerce platforms (B&H Photo, etc.) for a product and returns high-resolution image links and product metadata.
+    Universally retrieves high-resolution product imagery from across the web.
 
     Args:
-        query: Name or model of the product (e.g. 'Sony FX3 Cinema Camera', 'Godox TT600')
-        source: E-commerce platform to search (default: 'bh')
+        query: Product name/model (e.g. 'iPhone 16 Pro', 'Sony FX3', 'Nike Air Jordan') OR a direct product URL
+        max_images: Maximum number of images to return (default: 10)
+        site_filter: Optional specific domain to search (e.g. 'apple.com', 'bhphotovideo.com', 'amazon.com')
     """
-    return await scrape_product_images(query=query, source=source)
+    return await get_product_images(query=query, max_images=max_images, site_filter=site_filter)
 
 
 @mcp.tool()
-async def scrape_product_images_tool(query: str, source: str = "bh") -> ProductImageResult:
+async def get_product_images_tool(
+    query: str,
+    max_images: int = 10,
+    site_filter: Optional[str] = None
+) -> ProductImageResult:
     """
-    Alternative alias to scrape high-resolution product images.
+    Alias to fetch high-resolution product images.
 
     Args:
-        query: Name or model of the product
-        source: E-commerce platform to search (default: 'bh')
+        query: Product name/model OR direct product URL
+        max_images: Maximum images to return (default: 10)
+        site_filter: Optional domain filter
     """
-    return await scrape_product_images(query=query, source=source)
+    return await get_product_images(query=query, max_images=max_images, site_filter=site_filter)
 
 
 if __name__ == "__main__":
