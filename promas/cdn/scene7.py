@@ -1,15 +1,11 @@
 """
-Adobe Scene7 CDN Normalizer (Target, Best Buy, Home Depot)
+Adobe Scene7 CDN Normalizer Rule (Target, Best Buy, Home Depot)
 """
 
-from typing import Optional
+from promas.cdn.registry import register_cdn
 
 
-def normalize_scene7_url(url: str) -> Optional[str]:
-    """
-    Unwraps Scene7 CDN URLs to unconstrained master assets.
-    """
-    if "scene7.com" not in url:
-        return url
-
+@register_cdn("scene7.com")
+def upscale_scene7(url: str) -> str:
+    """Unwraps Scene7 CDN URLs to unconstrained master assets."""
     return url.split("?")[0]

@@ -1,16 +1,14 @@
 """
-Amazon CDN Normalizer & Master Upscaler
+Amazon CDN Normalizer Rule
 """
 
 import re
-from typing import Optional
+from promas.cdn.registry import register_cdn
 
 
-def normalize_amazon_url(url: str) -> Optional[str]:
-    """
-    Upscales Amazon product images to master 1500px resolution (._AC_SL1500_).
-    """
-    if not any(k in url for k in ["media-amazon.com", "images-amazon.com", "ssl-images-amazon.com"]):
-        return url
-
+@register_cdn("media-amazon.com")
+@register_cdn("images-amazon.com")
+@register_cdn("ssl-images-amazon.com")
+def upscale_amazon(url: str) -> str:
+    """Upscales Amazon product images to master 1500px resolution (._AC_SL1500_)."""
     return re.sub(r'\._[A-Z0-9_,]+_\.(jpg|jpeg|png|webp)', r'._AC_SL1500_.\1', url, flags=re.IGNORECASE)

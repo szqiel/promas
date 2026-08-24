@@ -1,5 +1,5 @@
 """
-Generic CDN and URL Normalization Helpers
+Generic URL Cleaning & Image Quality Validation
 """
 
 import re
@@ -59,12 +59,6 @@ def clean_generic_url(url: str, base_url: Optional[str] = None) -> Optional[str]
     cf_match = re.search(r'/cdn-cgi/image/[^/]+/(https?://.+)', url)
     if cf_match:
         url = cf_match.group(1)
-
-    # Imgix / Cloudinary / Fastly query dimension upscaling
-    if "imgix.net" in url or "cloudinary.com" in url or "fastly.net" in url:
-        url = re.sub(r'([?&])w=\d+', r'\1w=2000', url)
-        url = re.sub(r'([?&])width=\d+', r'\1width=2000', url)
-        url = re.sub(r'/w_\d+,h_\d+/', r'/w_2000,h_2000/', url)
 
     return url
 
