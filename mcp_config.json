@@ -2,7 +2,7 @@
   "mcpServers": {
     "promas": {
       "command": "python",
-      "args": ["c:/Users/SYAIR/Documents/Project/promas/promas_mcp_server.py"]
+      "args": ["/path/to/promas/promas_mcp_server.py"]
     }
   }
 }

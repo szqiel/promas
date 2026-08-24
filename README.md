@@ -1,39 +1,56 @@
 # Promas (Product Image Scraper)
 
-**Promas** is a scalable, zero-hardcoding product image scraper and Model Context Protocol (MCP) server for AI agents.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![FastMCP](https://img.shields.io/badge/MCP-FastMCP-green.svg)](https://modelcontextprotocol.io/)
 
-Unlike traditional scrapers that rely on fragile per-site CSS selectors, Promas uses a **Search-Driven Dynamic Discovery + Universal Semantic Extraction Pipeline** with Playwright Stealth, Schema.org JSON-LD parsing, OpenGraph/Microdata discovery, and master CDN upscalers. It works across **any brand or e-commerce platform** on the web (Apple, Nike, Sony, Amazon, Target, B&H, Best Buy, eBay, Shopify stores, and arbitrary product URLs).
+**Promas** is an automated product image scraper and Model Context Protocol (MCP) server for AI agents.
+
+Instead of writing fragile per-site scrapers that break whenever HTML structures change, Promas combines **Search-Driven Dynamic Discovery** with a **Universal Semantic Extraction Pipeline** and **Extensible CDN-Aware Upscaling**. It reliably extracts master-resolution product photography across any brand or retail site (Apple, Nike, Sony, Amazon, Target, B&H, Best Buy, eBay, Shopify stores, and arbitrary product URLs).
 
 ---
 
-## 1. Key Features
+## 1. Why Promas? (Comparison)
 
-- **Zero-Hardcoding Universal Architecture**: Scrapes any brand, retailer, or custom e-commerce store without requiring custom per-site scraper code.
-- **Search-Driven Dynamic Discovery**: Given any product query (e.g. `"iPhone 16 Pro"`, `"Nike Air Jordan 1"`), dynamically finds and visits authoritative product pages.
+| Feature | Raw Scripts (`BeautifulSoup`, `Puppeteer`) | Paid APIs (`Bright Data`, `ScrapingBee`) | **Promas** |
+| :--- | :--- | :--- | :--- |
+| **Cost** | Free | \$50–\$500+/mo recurring | **100% Free & Open-Source (MIT)** |
+| **Setup & Maintenance** | Fragile per-site selectors; breaks on redesigns | Generic HTML responses; requires custom parsers | **Search-Driven + Semantic Schemas + CDN Upscalers** |
+| **Anti-Bot & Stealth** | Blocked quickly by Cloudflare/Akamai | Handled in cloud | **Built-in Playwright Stealth evasion** |
+| **Image Quality** | Usually captures low-res UI thumbnails | Raw page images only | **Master CDN de-capping (up to 2500px+)** |
+| **AI Agent Native** | Manual wrapper needed | REST API only | **Native FastMCP Tool Protocol** |
+
+---
+
+## 2. Key Features
+
+- **Search-Driven Dynamic Discovery**: Finds authoritative product pages for any query (e.g. `"iPhone 16 Pro"`, `"Nike Air Jordan 1"`) without hardcoded store search URLs.
+- **Universal Semantic Extraction**: Extracts imagery across Schema.org JSON-LD (`Product`, `IndividualProduct`, `ItemPage`), Microdata (`[itemprop="image"]`), OpenGraph (`og:image`), Twitter Cards, and responsive `srcset` attributes.
+- **Extensible CDN-Aware Upscaling**: Domain-aware normalization rules unwrap thumbnail restrictions and upsample to master resolutions across **Adobe Scene7, Nike CDN, Shopify, Amazon CloudFront, Imgix, Cloudinary, Akamai, eBay, and B&H**.
 - **Multi-URL Parallel Redundancy**: Scrapes top candidate product pages concurrently via `asyncio.Semaphore` so individual site blocks or timeouts never stall the pipeline.
-- **Universal Semantic Extraction**: Extracts imagery across Schema.org JSON-LD (`Product`, `IndividualProduct`, `ItemPage`), Microdata (`itemprop="image"`), OpenGraph (`og:image`), Twitter Cards, and responsive `srcset` / high-res `data-*` attributes.
-- **Master CDN Upscaler**: Strips thumbnail size bounds and upscales resolutions across Cloudflare, Shopify, Amazon CloudFront, Scene7, Imgix, Akamai, eBay, and B&H.
-- **Direct Image Index Fallback**: Automatically queries high-resolution open image search if candidate web pages are unreachable.
+- **Direct Image Index Fallback**: Automatically queries high-resolution open image search if candidate web pages fail to load.
 - **Direct URL Support**: Pass any direct product URL (e.g. `https://www.apple.com/iphone-16-pro/`) to scrape it immediately.
-- **FastMCP Protocol**: Connects directly to AI Agents (Antigravity, Claude Desktop, Cursor, OpenAI Agents).
+- **FastMCP Protocol**: Plugs natively into AI Agent workflows (Antigravity, Claude Desktop, Cursor, OpenAI Agents).
 
 ---
 
-## 2. Installation
+## 3. Installation
 
-1. **Install Dependencies:**
+1. **Clone & Install Dependencies:**
    ```bash
+   git clone https://github.com/szqiel/promas.git
+   cd promas
    pip install -r requirements.txt
    ```
 
-2. **Install Playwright Chromium:**
+2. **Install Playwright Chromium Browser:**
    ```bash
    playwright install chromium
    ```
 
 ---
 
-## 3. Usage
+## 4. Usage
 
 ### A. Standalone CLI
 
@@ -47,13 +64,13 @@ python promas.py "iPhone 16 Pro"
 python promas.py "https://www.apple.com/iphone-16-pro/"
 ```
 
-#### Customize Image Count & Filter by Site:
+#### Filter by Specific Domain & Limit Count:
 ```bash
 python promas.py "Sony FX3" --max-images 5 --site bhphotovideo.com
 ```
 
 ### B. FastMCP Server
-Run the MCP server:
+Run the standalone MCP server:
 ```bash
 python promas_mcp_server.py
 ```
@@ -65,7 +82,7 @@ Add Promas to your agent or Claude Desktop configuration:
   "mcpServers": {
     "promas": {
       "command": "python",
-      "args": ["c:/Users/SYAIR/Documents/Project/promas/promas_mcp_server.py"]
+      "args": ["/path/to/promas/promas_mcp_server.py"]
     }
   }
 }
@@ -73,7 +90,7 @@ Add Promas to your agent or Claude Desktop configuration:
 
 ---
 
-## 4. Agent System Prompt Guidelines
+## 5. Agent System Prompt Guidelines
 
 Add the following instructions to your AI agent's system prompt:
 
@@ -89,7 +106,7 @@ GUIDELINES FOR USING PROMAS:
 
 ---
 
-## 5. Output Schema
+## 6. Output Schema
 
 ```json
 {
@@ -108,3 +125,9 @@ GUIDELINES FOR USING PROMAS:
   "error_message": null
 }
 ```
+
+---
+
+## 7. License
+
+This project is licensed under the [MIT License](LICENSE).
