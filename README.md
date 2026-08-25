@@ -1,11 +1,17 @@
 # Promas (Product Image Scraper)
 
-[![PyPI version](https://img.shields.io/pypi/v/promas.svg)](https://pypi.org/project/promas/)
-[![CI](https://github.com/szqiel/promas/actions/workflows/ci.yml/badge.svg)](https://github.com/szqiel/promas/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![FastMCP](https://img.shields.io/badge/MCP-FastMCP-green.svg)](https://modelcontextprotocol.io/)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/szqiel/promas/main/docs/assets/demo.gif" alt="Promas Demo" width="750">
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/promas/"><img src="https://img.shields.io/pypi/v/promas.svg" alt="PyPI version"></a>
+  <a href="https://github.com/szqiel/promas/actions/workflows/ci.yml"><img src="https://github.com/szqiel/promas/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="Dockerfile"><img src="https://img.shields.io/badge/Docker-Ready-blue.svg" alt="Docker"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-FastMCP-green.svg" alt="FastMCP"></a>
+</p>
 
 **Promas** is an automated product image scraper and Model Context Protocol (MCP) server for AI agents.
 
@@ -40,7 +46,33 @@ docker run --rm promas promas "Sony FX3"
 
 ---
 
-## 2. Why Promas? (Comparison)
+## 2. Architecture & Pipeline
+
+```mermaid
+graph TD
+    User([AI Agent / CLI Request]) --> Cache{TTL Disk Cache}
+    Cache -- "Cache Hit (<0.1s)" --> Return([Return Verified Master Assets])
+    Cache -- "Cache Miss" --> SearchRouter{Pluggable Discovery}
+    SearchRouter -->|BRAVE_API_KEY| BraveAPI[Brave Search API]
+    SearchRouter -->|SERPAPI_API_KEY| SerpAPI[SerpAPI Google]
+    SearchRouter -->|Default: Free / Zero Keys| BrowserSearch[Stealth Browser Discovery]
+    BraveAPI --> Scorer[E-Commerce Candidate Scorer]
+    SerpAPI --> Scorer
+    BrowserSearch --> Scorer
+    Scorer --> ParallelScraper[Parallel Multi-Page Scraper]
+    subgraph Scraping Pipeline
+        ParallelScraper --> RateLimiter[Domain Rate Limiter]
+        RateLimiter --> Parser[Universal Extractor: Schema.org, OG, Microdata, DOM]
+        Parser --> CDNUpscaler[CDN Master Upscalers: Scene7, Nike, Shopify, Amazon...]
+    end
+    CDNUpscaler --> Verifier[Async HTTP Verification & pHash Dedup]
+    Verifier --> CacheStore[(Save to Disk Cache)]
+    CacheStore --> Return
+```
+
+---
+
+## 3. Why Promas? (Comparison)
 
 | Feature | Raw Scripts (`BeautifulSoup`, `Puppeteer`) | Paid APIs (`Bright Data`, `ScrapingBee`) | **Promas** |
 | :--- | :--- | :--- | :--- |
@@ -55,24 +87,35 @@ docker run --rm promas promas "Sony FX3"
 
 ---
 
-## 3. Key Features
+## 4. Search Backends & Configuration
 
-- **Pluggable Search Backends**:
-  - **Primary (Official APIs)**: Supports **Brave Search API** (`BRAVE_API_KEY`) and **SerpAPI** (`SERPAPI_API_KEY`) for fast, stable, ToS-compliant query discovery.
-  - **Fallback (Browser-based)**: Built-in Playwright Stealth discovery queries Bing and DuckDuckGo when no API keys are configured.
-- **Universal Semantic Extraction**: Extracts imagery across Schema.org JSON-LD (`Product`, `IndividualProduct`, `ItemPage`), Microdata (`[itemprop="image"]`), OpenGraph (`og:image`), Twitter Cards, and responsive `srcset` attributes.
-- **Extensible CDN-Aware Upscaling**: Plugin-based `@register_cdn` registry unwraps thumbnail restrictions and upsamples to master resolutions across **Adobe Scene7, Nike CDN, Shopify, Amazon CloudFront, Imgix, Cloudinary, Akamai, eBay, and B&H**.
-- **Lightweight Async Verification**: Validates image MIME types (`image/*`), content-length, and actual pixel dimensions before returning results.
-- **Perceptual-Hash Deduplication (`imagehash`)**: Detects and eliminates near-identical photo crops/angles across different sources, keeping only the highest-resolution master asset.
-- **Per-Domain Rate Limiting & Concurrency**: Restricts simultaneous connections per domain with polite inter-request delays to protect target servers and prevent IP bans.
-- **Tenacity Retries with Exponential Backoff**: Automatically recovers from transient network drops and navigation timeouts.
-- **TTL Disk Caching**: Keyed on normalized query and filter parameters; eliminates redundant re-scraping with sub-second response times.
-- **Structured Logging (`loguru`)**: Full observability with detailed debug tracing for DOM selectors, schema blocks, cache hits, and warnings on failed page attempts.
-- **FastMCP Protocol**: Plugs natively into AI Agent workflows (Antigravity, Claude Desktop, Cursor, OpenAI Agents).
+Promas works **100% out of the box with zero configuration or API keys required**.
+
+### How Search Discovery Works:
+1. **Free / Default (Zero Setup)**: Promas uses its built-in Playwright Stealth browser engine to discover e-commerce candidates via Bing and DuckDuckGo for free.
+2. **Brave Search API (Recommended for Production)**: If `BRAVE_API_KEY` is set, Promas switches to official, ToS-compliant, sub-second API discovery.
+   - *Get a free key (2,000 free queries/month):* [Brave Search API](https://brave.com/search/api/)
+3. **SerpAPI (Alternative)**: If `SERPAPI_API_KEY` is set, Promas queries Google Search via SerpAPI.
+   - *Get a free key (100 free queries/month):* [SerpAPI](https://serpapi.com/)
+
+### Environment Variables Reference:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `BRAVE_API_KEY` | *None* | Optional API key for Brave Search |
+| `SERPAPI_API_KEY` | *None* | Optional API key for SerpAPI Google Search |
+| `PROMAS_GLOBAL_CONCURRENCY` | `3` | Max simultaneous browser contexts |
+| `PROMAS_PER_DOMAIN_CONCURRENCY` | `1` | Max concurrent requests per target store |
+| `PROMAS_DOMAIN_DELAY_SECONDS` | `0.5` | Polite delay between requests to the same domain |
+| `PROMAS_CACHE_ENABLED` | `True` | Toggle disk caching (`True`/`False`) |
+| `PROMAS_CACHE_TTL_SECONDS` | `86400` (24h) | Cache expiration time in seconds |
+| `PROMAS_ENABLE_IMAGE_VERIFICATION`| `True` | Async HTTP MIME & pixel dimension check |
+| `PROMAS_ENABLE_PERCEPTUAL_DEDUP` | `True` | pHash near-duplicate crop removal |
+| `PROMAS_PHASH_HAMMING_THRESHOLD` | `4` | Sensitivity threshold for pHash deduplication |
 
 ---
 
-## 4. Usage
+## 5. Usage
 
 ### A. Standalone CLI
 
@@ -132,7 +175,19 @@ promas-mcp
 
 ---
 
-## 5. Agent System Prompt Guidelines
+## 6. Multi-Tool MCP Suite
+
+Promas exposes dedicated granular tools to AI agents:
+
+| Tool | Purpose | Description |
+| :--- | :--- | :--- |
+| `fetch_product_images` | **Full Pipeline** | Query string or URL -> Automated discovery -> Parallel scrape -> HTTP validation -> pHash dedup -> Master photo links. |
+| `search_product_urls` | **Discovery Only** | Query string -> Fast ranking of candidate e-commerce product pages (returns URLs without scraping images). |
+| `scrape_single_url` | **Extraction Only** | Specific direct URL -> Extracts title and master image assets strictly from that page. |
+
+---
+
+## 7. Agent System Prompt Guidelines
 
 Add the following instructions to your AI agent's system prompt:
 
@@ -148,7 +203,7 @@ GUIDELINES FOR USING PROMAS:
 
 ---
 
-## 6. Output Schema
+## 8. Output Schema
 
 ```json
 {
@@ -170,7 +225,15 @@ GUIDELINES FOR USING PROMAS:
 
 ---
 
-## 7. Testing & Quality Assurance
+## 9. Contributing
+
+Contributions are warmly welcomed! Adding master upscaling support for a new e-commerce platform or CDN takes **less than 10 lines of code** with our decorator plugin registry.
+
+👉 **See [CONTRIBUTING.md](CONTRIBUTING.md) for step-by-step instructions on adding a new CDN rule.**
+
+---
+
+## 10. Testing & Quality Assurance
 
 Promas includes unit tests for pure parsing functions, type checks, and canary integration tests:
 
@@ -190,6 +253,6 @@ pytest -v --run-integration
 
 ---
 
-## 8. License
+## 11. License
 
 This project is licensed under the [MIT License](LICENSE).
