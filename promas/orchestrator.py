@@ -128,8 +128,7 @@ async def scrape_single_page_url(
                 await context.close()
 
             raw_images = extracted.get("images", [])
-            verified_images = await verify_and_deduplicate_candidate_images(raw_images)
-            final_images = verified_images[:max_images]
+            final_images = await verify_and_deduplicate_candidate_images(raw_images, max_images=max_images)
 
             if final_images:
                 result = ProductImageResult(
@@ -235,7 +234,7 @@ async def get_product_images(
                     locale="en-US"
                 )
                 search_page = await search_context.new_page()
-                target_urls = await discover_product_urls(search_page, query, site_filter=site_filter, max_urls=3)
+                target_urls = await discover_product_urls(search_page, query, site_filter=site_filter, max_urls=2)
                 await search_context.close()
 
                 if not target_urls:
@@ -271,9 +270,8 @@ async def get_product_images(
                 if fallback_images:
                     sources_scraped.append("image_search_index")
 
-            # 4. Async HTTP Verification & Perceptual-Hash Deduplication
-            verified_deduped_images = await verify_and_deduplicate_candidate_images(all_images)
-            final_images = verified_deduped_images[:max_images]
+            # 4. Async HTTP Verification & Perceptual-Hash Deduplication (Optimized)
+            final_images = await verify_and_deduplicate_candidate_images(all_images, max_images=max_images)
 
             if final_images:
                 result = ProductImageResult(

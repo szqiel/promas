@@ -123,7 +123,7 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
     # Trigger brief scroll to hydrate lazy-loaded images
     try:
         await page.evaluate("window.scrollBy(0, 600)")
-        await page.wait_for_timeout(1500)
+        await page.wait_for_timeout(400)
     except Exception as e:
         logger.debug(f"Hydration scroll on {url} encountered notice: {e}")
 

@@ -3,14 +3,13 @@ Lightweight Image Verifier & Perceptual-Hash Deduplication Layer
 Validates Content-Type, real pixel dimensions, and eliminates near-identical photo crops using perceptual hashing.
 """
 
+import asyncio
 import io
 from typing import List, Optional
-
 import httpx
 import imagehash
-from loguru import logger
 from PIL import Image
-
+from loguru import logger
 from promas.core.config import settings
 
 
@@ -38,8 +37,8 @@ async def verify_image_url(
     }
 
     try:
-        # Fetch image bytes (using streaming GET up to 1MB or full image)
-        resp = await client.get(url, headers=headers, follow_redirects=True, timeout=settings.timeout_http_seconds)
+        # Fast streaming GET or header check with strict 4s timeout
+        resp = await client.get(url, headers=headers, follow_redirects=True, timeout=4.0)
         if resp.status_code != 200:
             logger.debug(f"Image verification failed: HTTP {resp.status_code} on {url[:80]}")
             return None
@@ -117,38 +116,41 @@ def deduplicate_by_phash(
 
 
 async def verify_and_deduplicate_candidate_images(
-    candidate_urls: List[str]
+    candidate_urls: List[str],
+    max_images: int = 10
 ) -> List[str]:
     """
     Concurrently verifies candidate URLs, filters out broken/non-image assets,
     and deduplicates near-identical photos via perceptual hashing.
+    Optimized to cap parallel network checks to max_images * 2 for maximum speed.
     """
     if not candidate_urls:
         return []
 
     if not settings.enable_image_verification:
-        return candidate_urls
+        return candidate_urls[:max_images]
 
-    logger.info(f"Verifying {len(candidate_urls)} candidate image URLs via async HTTP/pHash...")
+    # Limit candidate URLs to verify (top 15-20 assets is more than enough to yield 10 verified master photos)
+    capped_candidates = candidate_urls[:max(max_images * 2, 12)]
+    logger.info(f"Verifying {len(capped_candidates)} candidate image URLs via async HTTP/pHash...")
     verified: List[VerifiedImage] = []
 
-    async with httpx.AsyncClient(timeout=settings.timeout_http_seconds) as client:
-        # Check concurrently
-        import asyncio
-        tasks = [verify_image_url(client, url) for url in candidate_urls]
+    limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
+    async with httpx.AsyncClient(limits=limits, timeout=4.0) as client:
+        tasks = [verify_image_url(client, url) for url in capped_candidates]
         results = await asyncio.gather(*tasks)
 
         for res in results:
             if res is not None:
                 verified.append(res)
 
-    logger.info(f"Verification passed for {len(verified)} / {len(candidate_urls)} images")
+    logger.info(f"Verification passed for {len(verified)} / {len(capped_candidates)} images")
 
     # If verification filtered everything out (e.g. strict WAF on direct image download), fallback gracefully
     if not verified and candidate_urls:
         logger.warning("All direct image HEAD/GET checks were blocked; falling back to candidate URLs")
-        return candidate_urls
+        return candidate_urls[:max_images]
 
     final_deduped_urls = deduplicate_by_phash(verified, settings.phash_hamming_threshold)
     logger.info(f"Perceptual deduplication resulted in {len(final_deduped_urls)} unique master photos")
-    return final_deduped_urls
+    return final_deduped_urls[:max_images]
