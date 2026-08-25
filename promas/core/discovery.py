@@ -11,15 +11,8 @@ from playwright.async_api import Page
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from promas.cdn.registry import clean_and_upscale_image_url, is_valid_product_image
+from promas.core.config import settings
 from promas.search_backends import search_candidate_urls
-
-DISCARD_DOMAINS = [
-    "google.com", "bing.com", "duckduckgo.com", "wikipedia.org", "wikimedia.org",
-    "wikileaks.org", "wiktionary.org", "theperfectfrench.com", "dictionary.com",
-    "merriam-webster.com", "cambridge.org", "youtube.com", "facebook.com", "twitter.com",
-    "linkedin.com", "indeed.com", "glassdoor.com", "ziprecruiter.com", "governmentjobs.com",
-    "governmentresource.com"
-]
 
 
 def score_product_url(url: str, query_keywords: List[str]) -> int:
@@ -30,7 +23,7 @@ def score_product_url(url: str, query_keywords: List[str]) -> int:
     url_lower = url.lower()
 
     # Discard non-retail / non-product domains immediately
-    for d in DISCARD_DOMAINS:
+    for d in settings.discard_domains:
         if d in url_lower:
             return -100
 
@@ -101,7 +94,7 @@ async def discover_product_urls(
     reraise=False
 )
 async def _navigate_image_fallback(page: Page, url: str) -> None:
-    await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+    await page.goto(url, wait_until="domcontentloaded", timeout=settings.timeout_search_ms)
 
 
 async def scrape_image_index_fallback(page: Page, query: str, max_images: int = 10) -> List[str]:

@@ -4,25 +4,22 @@ Provides persistent query & URL caching using diskcache to reduce duplicate scra
 """
 
 import hashlib
-import os
 from pathlib import Path
 from typing import Optional
 
 from diskcache import Cache
 from loguru import logger
 
+from promas.core.config import settings
 from promas.core.models import ProductImageResult
 
-# Default cache directory in user cache or local workspace
-DEFAULT_CACHE_DIR = os.environ.get(
-    "PROMAS_CACHE_DIR",
-    str(Path.home() / ".cache" / "promas")
-)
+# Cache directory from settings or user cache
+_cache_path = settings.cache_dir or str(Path.home() / ".cache" / "promas")
 
 try:
-    _cache = Cache(DEFAULT_CACHE_DIR)
+    _cache = Cache(_cache_path) if settings.cache_enabled else None
 except Exception as e:
-    logger.warning(f"Could not initialize diskcache at {DEFAULT_CACHE_DIR}: {e}. Caching disabled.")
+    logger.warning(f"Could not initialize diskcache at {_cache_path}: {e}. Caching disabled.")
     _cache = None
 
 
@@ -40,7 +37,7 @@ def get_cached_result(
     site_filter: Optional[str] = None
 ) -> Optional[ProductImageResult]:
     """Retrieves cached ProductImageResult if valid and unexpired."""
-    if _cache is None:
+    if _cache is None or not settings.cache_enabled:
         return None
 
     key = make_cache_key(query, max_images, site_filter)
@@ -60,16 +57,17 @@ def set_cached_result(
     result: ProductImageResult,
     max_images: int = 10,
     site_filter: Optional[str] = None,
-    ttl: int = 86400  # Default 24 hours
+    ttl: Optional[int] = None
 ) -> None:
     """Saves ProductImageResult into cache with specified TTL in seconds."""
-    if _cache is None or result.status != "success":
+    if _cache is None or not settings.cache_enabled or result.status != "success":
         return
 
     key = make_cache_key(query, max_images, site_filter)
+    expire_ttl = ttl if ttl is not None else settings.cache_ttl_seconds
     try:
-        _cache.set(key, result.model_dump_json(), expire=ttl)
-        logger.debug(f"Cached result for query='{query}' with TTL={ttl}s")
+        _cache.set(key, result.model_dump_json(), expire=expire_ttl)
+        logger.debug(f"Cached result for query='{query}' with TTL={expire_ttl}s")
     except Exception as e:
         logger.debug(f"Cache write error: {e}")
 

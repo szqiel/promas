@@ -6,14 +6,9 @@ import re
 import urllib.parse
 from typing import Optional
 
-BLOCKED_PATTERNS = [
-    r'logo', r'icon', r'badge', r'avatar', r'spacer', r'pixel', r'blank',
-    r'tracking', r'spinner', r'placeholder', r'arrow', r'rating', r'star',
-    r'payment', r'credit-card', r'visa', r'mastercard', r'paypal', r'favicon',
-    r'branding', r'googleg_', r'course', r'bundle', r'button', r'banner', r'seller',
-    r'shop_snippet', r'1x1'
-]
-BLOCKED_REGEX = re.compile('|'.join(BLOCKED_PATTERNS), re.IGNORECASE)
+from promas.core.config import settings
+
+_BLOCKED_REGEX = re.compile('|'.join(settings.blocked_patterns), re.IGNORECASE)
 
 
 def clean_generic_url(url: str, base_url: Optional[str] = None) -> Optional[str]:
@@ -89,7 +84,7 @@ def is_valid_product_image(url: str) -> bool:
             return False
 
     # Check for blocked patterns anywhere in URL
-    if BLOCKED_REGEX.search(url_lower):
+    if _BLOCKED_REGEX.search(url_lower):
         return False
 
     # Check for tiny dimension parameters

@@ -3,13 +3,16 @@ Promas Core Package
 """
 
 from promas.core.cache import clear_cache, get_cached_result, set_cached_result
+from promas.core.config import settings
 from promas.core.discovery import discover_product_urls, score_product_url, scrape_image_index_fallback
 from promas.core.extractor import extract_page_product_images, parse_json_ld_images, parse_srcset_images
 from promas.core.models import ProductImageResult
 from promas.core.rate_limiter import DomainRateLimiter
+from promas.core.verifier import deduplicate_by_phash, verify_and_deduplicate_candidate_images, verify_image_url
 
 __all__ = [
     "ProductImageResult",
+    "settings",
     "extract_page_product_images",
     "parse_json_ld_images",
     "parse_srcset_images",
@@ -20,4 +23,7 @@ __all__ = [
     "set_cached_result",
     "clear_cache",
     "DomainRateLimiter",
+    "verify_image_url",
+    "deduplicate_by_phash",
+    "verify_and_deduplicate_candidate_images",
 ]
