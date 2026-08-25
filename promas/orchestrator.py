@@ -42,6 +42,117 @@ async def _navigate_with_retry(page: Page, target_url: str) -> None:
         raise
 
 
+async def discover_candidate_urls(
+    query: str,
+    site_filter: Optional[str] = None,
+    max_urls: int = 5
+) -> List[str]:
+    """
+    Discovery-only helper: Returns ranked candidate e-commerce product URLs for a query.
+    """
+    query = query.strip()
+    pw_cm = Stealth().use_async(async_playwright()) if HAS_STEALTH else async_playwright()
+    async with pw_cm as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-infobars",
+                "--disable-dev-shm-usage",
+                f"--window-size={settings.viewport_width},{settings.viewport_height}"
+            ]
+        )
+        try:
+            context = await browser.new_context(
+                user_agent=settings.user_agent,
+                viewport={"width": settings.viewport_width, "height": settings.viewport_height},
+                locale="en-US"
+            )
+            page = await context.new_page()
+            urls = await discover_product_urls(page, query, site_filter=site_filter, max_urls=max_urls)
+            await context.close()
+            return urls
+        finally:
+            await browser.close()
+
+
+async def scrape_single_page_url(
+    url: str,
+    max_images: int = 10,
+    use_cache: Optional[bool] = None
+) -> ProductImageResult:
+    """
+    Extraction-only helper: Scrapes product title and master imagery from a single direct URL.
+    """
+    url = url.strip()
+    should_cache = use_cache if use_cache is not None else settings.cache_enabled
+
+    if should_cache:
+        cached = get_cached_result(url, max_images, None)
+        if cached:
+            logger.info(f"Returning cached results for URL='{url}' ({len(cached.images)} images)")
+            return cached
+
+    pw_cm = Stealth().use_async(async_playwright()) if HAS_STEALTH else async_playwright()
+    async with pw_cm as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-infobars",
+                "--disable-dev-shm-usage",
+                f"--window-size={settings.viewport_width},{settings.viewport_height}"
+            ]
+        )
+        try:
+            context = await browser.new_context(
+                user_agent=settings.user_agent,
+                viewport={"width": settings.viewport_width, "height": settings.viewport_height},
+                locale="en-US"
+            )
+            page = await context.new_page()
+            try:
+                await _navigate_with_retry(page, url)
+                extracted = await extract_page_product_images(page, url)
+            except Exception as e:
+                logger.warning(f"Direct scrape failed for {url}: {e}")
+                return ProductImageResult(
+                    status="error",
+                    query=url,
+                    sources_scraped=[url],
+                    error_message=f"Failed to scrape {url}: {e}"
+                )
+            finally:
+                await context.close()
+
+            raw_images = extracted.get("images", [])
+            verified_images = await verify_and_deduplicate_candidate_images(raw_images)
+            final_images = verified_images[:max_images]
+
+            if final_images:
+                result = ProductImageResult(
+                    status="success",
+                    query=url,
+                    title=extracted.get("title") or url,
+                    sources_scraped=[url],
+                    images=final_images
+                )
+                if should_cache:
+                    set_cached_result(url, result, max_images, None)
+                return result
+            else:
+                return ProductImageResult(
+                    status="error",
+                    query=url,
+                    sources_scraped=[url],
+                    error_message=f"No verified product images found on {url}"
+                )
+        finally:
+            await browser.close()
+
+
 async def get_product_images(
     query: str,
     max_images: int = 10,
