@@ -6,10 +6,12 @@ Validates Content-Type, real pixel dimensions, and eliminates near-identical pho
 import asyncio
 import io
 from typing import List, Optional
+
 import httpx
 import imagehash
-from PIL import Image
 from loguru import logger
+from PIL import Image
+
 from promas.core.config import settings
 
 

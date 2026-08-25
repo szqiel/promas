@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/promas/"><img src="https://img.shields.io/pypi/v/promas.svg" alt="PyPI version"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version 1.0.0"></a>
   <a href="https://github.com/szqiel/promas/actions/workflows/ci.yml"><img src="https://github.com/szqiel/promas/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="Dockerfile"><img src="https://img.shields.io/badge/Docker-Ready-blue.svg" alt="Docker"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
