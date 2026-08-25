@@ -7,7 +7,7 @@
 
 **Promas** is an automated product image scraper and Model Context Protocol (MCP) server for AI agents.
 
-Instead of writing fragile per-site scrapers that break whenever HTML structures change, Promas combines **Search-Driven Dynamic Discovery** with a **Universal Semantic Extraction Pipeline** and **Extensible CDN-Aware Upscaling**. It reliably extracts master-resolution product photography across any brand or retail site (Apple, Nike, Sony, Amazon, Target, B&H, Best Buy, eBay, Shopify stores, and arbitrary product URLs).
+Instead of writing fragile per-site scrapers that break whenever HTML structures change, Promas combines **Pluggable Search-Driven Discovery** with a **Universal Semantic Extraction Pipeline** and **Extensible CDN-Aware Upscaling**. It reliably extracts master-resolution product photography across any brand or retail site (Apple, Nike, Sony, Amazon, Target, B&H, Best Buy, eBay, Shopify stores, and arbitrary product URLs).
 
 ---
 
@@ -17,7 +17,9 @@ Instead of writing fragile per-site scrapers that break whenever HTML structures
 | :--- | :--- | :--- | :--- |
 | **Cost** | Free | \$50–\$500+/mo recurring | **100% Free & Open-Source (MIT)** |
 | **Setup & Maintenance** | Fragile per-site selectors; breaks on redesigns | Generic HTML responses; requires custom parsers | **Search-Driven + Semantic Schemas + CDN Upscalers** |
-| **Anti-Bot & Stealth** | Blocked quickly by Cloudflare/Akamai | Handled in cloud | **Built-in Playwright Stealth evasion** |
+| **Anti-Bot & Rate Limits** | Blocked quickly by Cloudflare/Akamai | Handled in cloud | **Per-Domain Rate Limiter + Stealth + Tenacity Retries** |
+| **Search Backends** | Hardcoded scrapers | Custom API scrapers | **Pluggable (Brave API / SerpAPI / Browser Fallback)** |
+| **Caching** | None | Extra cost | **Built-in TTL Disk Cache (Instant repeated lookups)** |
 | **Image Quality** | Usually captures low-res UI thumbnails | Raw page images only | **Master CDN de-capping (up to 2500px+)** |
 | **AI Agent Native** | Manual wrapper needed | REST API only | **Native FastMCP Tool Protocol** |
 
@@ -25,12 +27,16 @@ Instead of writing fragile per-site scrapers that break whenever HTML structures
 
 ## 2. Key Features
 
-- **Search-Driven Dynamic Discovery**: Finds authoritative product pages for any query (e.g. `"iPhone 16 Pro"`, `"Nike Air Jordan 1"`) without hardcoded store search URLs.
+- **Pluggable Search Backends**:
+  - **Primary (Official APIs)**: Supports **Brave Search API** (`BRAVE_API_KEY`) and **SerpAPI** (`SERPAPI_API_KEY`) for fast, stable, ToS-compliant query discovery.
+  - **Fallback (Browser-based)**: Built-in Playwright Stealth discovery queries Bing and DuckDuckGo when no API keys are configured.
 - **Universal Semantic Extraction**: Extracts imagery across Schema.org JSON-LD (`Product`, `IndividualProduct`, `ItemPage`), Microdata (`[itemprop="image"]`), OpenGraph (`og:image`), Twitter Cards, and responsive `srcset` attributes.
-- **Extensible CDN-Aware Upscaling**: Domain-aware normalization rules unwrap thumbnail restrictions and upsample to master resolutions across **Adobe Scene7, Nike CDN, Shopify, Amazon CloudFront, Imgix, Cloudinary, Akamai, eBay, and B&H**.
-- **Multi-URL Parallel Redundancy**: Scrapes top candidate product pages concurrently via `asyncio.Semaphore` so individual site blocks or timeouts never stall the pipeline.
+- **Extensible CDN-Aware Upscaling**: Plugin-based `@register_cdn` registry unwraps thumbnail restrictions and upsamples to master resolutions across **Adobe Scene7, Nike CDN, Shopify, Amazon CloudFront, Imgix, Cloudinary, Akamai, eBay, and B&H**.
+- **Per-Domain Rate Limiting & Concurrency**: Restricts simultaneous connections per domain with polite inter-request delays to protect target servers and prevent IP bans.
+- **Tenacity Retries with Exponential Backoff**: Automatically recovers from transient network drops and navigation timeouts.
+- **TTL Disk Caching**: Keyed on normalized query and filter parameters; eliminates redundant re-scraping with sub-second response times.
+- **Structured Logging (`loguru`)**: Full observability with detailed debug tracing for DOM selectors, schema blocks, cache hits, and warnings on failed page attempts.
 - **Direct Image Index Fallback**: Automatically queries high-resolution open image search if candidate web pages fail to load.
-- **Direct URL Support**: Pass any direct product URL (e.g. `https://www.apple.com/iphone-16-pro/`) to scrape it immediately.
 - **FastMCP Protocol**: Plugs natively into AI Agent workflows (Antigravity, Claude Desktop, Cursor, OpenAI Agents).
 
 ---
@@ -48,6 +54,16 @@ Instead of writing fragile per-site scrapers that break whenever HTML structures
    ```bash
    playwright install chromium
    ```
+
+3. **(Optional) Configure Search API Key:**
+   ```bash
+   # Brave Search API (Recommended for production)
+   export BRAVE_API_KEY="your-brave-api-key"
+
+   # Or SerpAPI Google Search
+   export SERPAPI_API_KEY="your-serpapi-key"
+   ```
+   *If no API keys are provided, Promas automatically uses the built-in browser discovery engine.*
 
 ---
 
@@ -83,7 +99,10 @@ Add Promas to your agent or Claude Desktop configuration:
   "mcpServers": {
     "promas": {
       "command": "python",
-      "args": ["/path/to/promas/promas_mcp_server.py"]
+      "args": ["/path/to/promas/promas_mcp_server.py"],
+      "env": {
+        "BRAVE_API_KEY": "optional-key-here"
+      }
     }
   }
 }

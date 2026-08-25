@@ -1,5 +1,6 @@
 """
-Bing Browser Stealth Search Backend
+Bing & DuckDuckGo Browser Stealth Search Backend (Experimental / Best-Effort Fallback)
+Used when no API keys (Brave / SerpAPI) are configured or when APIs are unavailable.
 """
 
 import base64
@@ -7,6 +8,7 @@ import re
 import urllib.parse
 from typing import List, Optional
 
+from loguru import logger
 from playwright.async_api import Page
 
 from promas.search_backends.base import BaseSearchBackend
@@ -35,14 +37,34 @@ def decode_bing_redirect(url: Optional[str]) -> Optional[str]:
 
 
 class BingBrowserSearchBackend(BaseSearchBackend):
-    """Stealth Playwright Bing Organic Search Backend."""
+    """
+    Experimental Browser-Based Discovery Backend.
+    Uses Playwright Stealth to query Bing and DuckDuckGo for candidate product pages.
+    """
 
-    async def search(self, page: Page, query: str, site_filter: Optional[str] = None) -> List[str]:
+    name: str = "browser_stealth (experimental fallback)"
+    is_experimental: bool = True
+    requires_api_key: bool = False
+
+    def is_available(self) -> bool:
+        return True
+
+    async def search(
+        self,
+        query: str,
+        site_filter: Optional[str] = None,
+        page: Optional[Page] = None
+    ) -> List[str]:
+        if page is None:
+            logger.warning("[Browser Discovery] Playwright Page instance required for browser search backend")
+            return []
+
         search_query = query if not site_filter else f"site:{site_filter} {query}"
         encoded = urllib.parse.quote(f"{search_query} buy")
         bing_url = f"https://www.bing.com/search?q={encoded}"
         discovered_urls: List[str] = []
 
+        logger.info(f"[Browser Discovery] Querying Bing: '{search_query}' (experimental fallback)...")
         try:
             await page.goto(bing_url, wait_until="domcontentloaded", timeout=15000)
             links = await page.locator('#b_results h2 a').all()
@@ -51,7 +73,23 @@ class BingBrowserSearchBackend(BaseSearchBackend):
                 decoded = decode_bing_redirect(href)
                 if decoded and decoded not in discovered_urls:
                     discovered_urls.append(decoded)
-        except Exception:
-            pass
+            logger.debug(f"[Browser Discovery] Discovered {len(discovered_urls)} raw links from Bing")
+        except Exception as e:
+            logger.warning(f"[Browser Discovery] Bing search error: {e}")
+
+        # DuckDuckGo fallback if Bing returned 0 links
+        if not discovered_urls:
+            try:
+                logger.info(f"[Browser Discovery] Falling back to DuckDuckGo: '{search_query}'...")
+                ddg_url = f"https://duckduckgo.com/?q={urllib.parse.quote(search_query)}"
+                await page.goto(ddg_url, wait_until="domcontentloaded", timeout=15000)
+                await page.wait_for_timeout(1500)
+                ddg_links = await page.locator('article h2 a, [data-testid="result-title-a"]').all()
+                for link in ddg_links:
+                    href = await link.get_attribute("href")
+                    if href and href.startswith("http") and "duckduckgo.com" not in href and href not in discovered_urls:
+                        discovered_urls.append(href)
+            except Exception as e:
+                logger.warning(f"[Browser Discovery] DuckDuckGo fallback error: {e}")
 
         return discovered_urls

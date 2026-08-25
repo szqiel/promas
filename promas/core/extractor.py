@@ -7,6 +7,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
 from playwright.async_api import Page
 
 from promas.cdn.registry import clean_and_upscale_image_url, is_valid_product_image
@@ -61,7 +62,8 @@ def parse_json_ld_images(raw_json: str, base_url: Optional[str] = None) -> List[
     images: List[str] = []
     try:
         data = json.loads(raw_json)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to decode JSON-LD script block: {e}")
         return images
 
     nodes = []
@@ -122,16 +124,20 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
     try:
         await page.evaluate("window.scrollBy(0, 600)")
         await page.wait_for_timeout(1500)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Hydration scroll on {url} encountered notice: {e}")
 
     # 1. Schema.org JSON-LD
     schemas = await page.locator('script[type="application/ld+json"]').all_inner_texts()
+    if not schemas:
+        logger.debug(f"No JSON-LD scripts found on {url}")
     for s in schemas:
         found = parse_json_ld_images(s, url)
         for img in found:
             if img not in images:
                 images.append(img)
+    if schemas and images:
+        logger.debug(f"Extracted {len(images)} images via JSON-LD on {url}")
 
     # 2. OpenGraph & Twitter Cards Meta
     meta_selectors = [
@@ -141,6 +147,7 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
         'meta[name="twitter:image:src"]',
         'meta[itemprop="image"]'
     ]
+    og_count = 0
     for meta_sel in meta_selectors:
         locs = page.locator(meta_sel)
         cnt = await locs.count()
@@ -150,10 +157,15 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
                 cleaned = clean_and_upscale_image_url(content, url)
                 if cleaned and is_valid_product_image(cleaned) and cleaned not in images:
                     images.append(cleaned)
+                    og_count += 1
+    if og_count > 0:
+        logger.debug(f"Extracted {og_count} meta OpenGraph/Twitter images on {url}")
 
     # 3. Microdata & RDFa
     microdata_locs = page.locator('[itemprop="image"]')
     cnt = await microdata_locs.count()
+    if cnt == 0:
+        logger.debug(f"No [itemprop='image'] Microdata elements found on {url}")
     for i in range(cnt):
         loc = microdata_locs.nth(i)
         tag_name = await loc.evaluate("el => el.tagName.toLowerCase()")
@@ -174,8 +186,8 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
                     cleaned = clean_and_upscale_image_url(dyn_url, url)
                     if cleaned and is_valid_product_image(cleaned) and cleaned not in images:
                         images.append(cleaned)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Amazon dynamic image data parsing notice: {e}")
 
     # 5. DOM & Responsive srcset & High-Res attributes
     dom_image_selectors = [
@@ -230,6 +242,7 @@ async def extract_page_product_images(page: Page, url: str) -> Dict[str, Any]:
         if h1_text and len(h1_text) > 3:
             title = h1_text
 
+    logger.info(f"Finished extraction on {url}: found {len(images)} images (title='{title}')")
     return {
         "title": title,
         "url": url,
