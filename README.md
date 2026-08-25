@@ -253,6 +253,16 @@ pytest -v --run-integration
 
 ---
 
-## 11. License
+## 11. Legal & Ethical Use
+
+- **Public Access Only**: Promas accesses exclusively publicly available web pages; it does not bypass authentication, paywalls, or private logins.
+- **Terms of Service**: Automated access may be subject to individual site Terms of Service. Always review target domains' ToS and robot policies before scraping at scale, or supply official search API keys (`BRAVE_API_KEY` / `SERPAPI_API_KEY`) for ToS-compliant discovery.
+- **Image Copyright & Attribution**: Promas resolves and returns direct image URLs — it does not store, rehost, or copy media files. Downstream display, storage, or commercial use of retrieved imagery is the user's responsibility.
+
+---
+
+## 12. License
 
 This project is licensed under the [MIT License](LICENSE).
+
+
