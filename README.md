@@ -229,7 +229,7 @@ GUIDELINES FOR USING PROMAS:
 
 Contributions are warmly welcomed! Adding master upscaling support for a new e-commerce platform or CDN takes **less than 10 lines of code** with our decorator plugin registry.
 
-👉 **See [CONTRIBUTING.md](CONTRIBUTING.md) for step-by-step instructions on adding a new CDN rule.**
+**See [CONTRIBUTING.md](CONTRIBUTING.md) for step-by-step instructions on adding a new CDN rule.**
 
 ---
 
