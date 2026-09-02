@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "promas": {
+      "command": "promas-mcp"
+    }
+  }
+}

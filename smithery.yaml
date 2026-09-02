@@ -1,0 +1,20 @@
+# Smithery configuration file for Promas MCP Server
+# Learn more at: https://smithery.ai/docs/config
+
+startCommand:
+  type: stdio
+  config:
+    command: promas-mcp
+    args: []
+    env:
+      BRAVE_API_KEY:
+        type: string
+        description: "Optional Brave Search API key for official ToS-compliant search discovery"
+        required: false
+      SERPAPI_API_KEY:
+        type: string
+        description: "Optional SerpAPI key for Google Search discovery"
+        required: false
+
+description: "Universal product image scraper and Model Context Protocol (MCP) server for AI agents. Extracts high-resolution master photography across Apple, Nike, Sony, Amazon, Target, and arbitrary e-commerce URLs."
+repository: "https://github.com/szqiel/promas"

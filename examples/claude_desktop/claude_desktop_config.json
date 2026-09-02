@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "promas": {
+      "command": "promas-mcp",
+      "env": {
+        "BRAVE_API_KEY": ""
+      }
+    }
+  }
+}

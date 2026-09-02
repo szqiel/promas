@@ -203,7 +203,19 @@ GUIDELINES FOR USING PROMAS:
 
 ---
 
-## 8. Output Schema
+## 8. Integration Examples & Frameworks
+
+Promas includes copy-pasteable configuration snippets and runnable example scripts in the [`examples/`](examples/) directory:
+
+- 🤖 **[Claude Desktop](examples/claude_desktop/)**: Complete setup guide and `claude_desktop_config.json`.
+- 💻 **[Cursor IDE](examples/cursor/)**: `mcp.json` config and prompt examples for Cursor Composer.
+- 🦜🔗 **[LangChain](examples/langchain_agent/)**: Structured `@tool` wrapper and ReAct agent script.
+- ⚡ **[OpenAI API](examples/openai_agent/)**: Native OpenAI Tool / Function Calling implementation.
+- 📦 **[Smithery](https://smithery.ai)**: One-click installation via `npx -y @smithery/cli install promas --client claude`.
+
+---
+
+## 9. Output Schema
 
 ```json
 {
@@ -225,7 +237,7 @@ GUIDELINES FOR USING PROMAS:
 
 ---
 
-## 9. Contributing
+## 10. Contributing
 
 Contributions are warmly welcomed! Adding master upscaling support for a new e-commerce platform or CDN takes **less than 10 lines of code** with our decorator plugin registry.
 
@@ -233,7 +245,7 @@ Contributions are warmly welcomed! Adding master upscaling support for a new e-c
 
 ---
 
-## 10. Testing & Quality Assurance
+## 11. Testing & Quality Assurance
 
 Promas includes unit tests for pure parsing functions, type checks, and canary integration tests:
 
@@ -253,7 +265,7 @@ pytest -v --run-integration
 
 ---
 
-## 11. Legal & Ethical Use
+## 12. Legal & Ethical Use
 
 - **Public Access Only**: Promas accesses exclusively publicly available web pages; it does not bypass authentication, paywalls, or private logins.
 - **Terms of Service**: Automated access may be subject to individual site Terms of Service. Always review target domains' ToS and robot policies before scraping at scale, or supply official search API keys (`BRAVE_API_KEY` / `SERPAPI_API_KEY`) for ToS-compliant discovery.
@@ -261,8 +273,9 @@ pytest -v --run-integration
 
 ---
 
-## 12. License
+## 13. License
 
 This project is licensed under the [MIT License](LICENSE).
+
 
 
